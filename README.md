@@ -12,10 +12,11 @@ It is not a medical or clinical tool. It does not diagnose, treat, or claim to r
 
 ## Approach
 
-Webcam → MediaPipe Face Mesh → Eye Aspect Ratio (EAR) blink detection → rolling baseline → risk score → serial → ESP32-S3 → NeoPixel ring.
+Webcam >> MediaPipe Face Mesh >> Eye Aspect Ratio (EAR) blink detection >> rolling baseline >> risk score >> serial >> ESP32-S3 >> NeoPixel ring.
 
-- **Landmark-based detection, not a learned classifier**: six MediaPipe landmarks per eye, EAR thresholded in real time, no training data or model required.
-- **Signal processing with a floor**: the reference blink rate is a rolling mean of the last 30 samples, clamped to a literature-derived floor so a sustained low rate can't drag its own reference down and quietly read as normal.
+- **EAR-based blink detection, not a learned classifier**: `EAR = (A + B) / (2 · C)` from six MediaPipe landmarks per eye, thresholded in real time at 0.21 (open eyes read ~0.25-0.30, closed ~0.05-0.08). No training data or model required.
+- **Rolling baseline with a literature floor**: `BaselineEngine` keeps a 30-sample rolling mean, pre-filled with a literature-derived prior (15 blinks/min, Rosenfield 2011) so it's meaningful from sample one, floored at 7 blinks/min so a sustained low rate can't drag its own reference down and quietly read as normal.
+- **Weighted risk score**: `RiskEngine` computes `risk_score = 0.5 × blink_risk + 0.5 × focus_risk`, where `blink_risk = max(0, (reference − current_rate) / reference)` and `focus_risk` saturates at 1.0 after 20 minutes without a break. CALM below 0.3, ATTENTION below 0.6, BREAK at or above.
 - **State machine driving physical hardware**: `main.py` sends single-letter state commands (C/A/B) over serial on every state change. The firmware runs its own local logic for the tap/hold button gestures and queues incoming commands during an override, so software and hardware each own a distinct part of the behavior rather than one blindly relaying to the other.
 
 ## Results
@@ -64,6 +65,7 @@ Keyboard: `q` quit, `r` reset, `d` toggle demo/real baseline speed, `1`/`2`/`3` 
 Submitted to NordiCHI 2026 Demo track, not accepted for logistical reasons, not a reflection of the work's quality.
 
 ## Credits
+
 Licensed under MIT. If you build on this or reuse parts of it, a credit or link back is appreciated but not required.
 
 **Fuad Mammadov**
