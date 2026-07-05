@@ -1,45 +1,72 @@
 # Lumen
 
-A physical desk object that senses blink rate via webcam and signals 
-eye strain risk through ambient light. Built as a NordiCHI 2026 Demo 
-track submission.
+![Lumen dome in CALM, BREAK, and BREATHING states, with a hand demonstrating the touch interaction](assets/lumen.jpeg)
 
-## What it does
+A webcam-driven computer vision pipeline (MediaPipe Face Mesh, blink detection, rolling baseline, risk scoring) controls a physical LED object over serial to an ESP32-S3, built to show a full CV-to-hardware loop working end to end.
 
-Webcam → MediaPipe Face Mesh → EAR blink detection → rolling risk 
-score → serial command → ESP32-S3 → NeoPixel LED ring.
+## What this is, and isn't
 
-Three ambient states: calm (blue), attention (amber), break (red).
-Two user gestures: tap to pause, hold to start breathing exercise.
+This is a computer vision and embedded systems demonstration: real-time facial landmark tracking, a blink detection and signal processing pipeline built from scratch, and a physical actuator driven by that signal. The eye strain framing is the applied context that motivated the build, not a product claim.
 
-## Hardware
+It is not a medical or clinical tool. It does not diagnose, treat, or claim to reduce Computer Vision Syndrome or any condition. Blink rate is used here as a heuristic signal, chosen because it is measurable in real time from a laptop webcam, not as a validated biomarker. No population study or efficacy evaluation was performed; the only validation here is blink-detection accuracy (F1), reported below. The pipeline tracks eye landmarks and eyelid closure, not gaze direction.
 
-- XIAO ESP32-S3 + NeoPixel 16-LED ring + momentary button
-- 3D-printed translucent PLA dome, ~10 cm
-- USB-C to MacBook
+## Approach
 
-## Performance
+Webcam → MediaPipe Face Mesh → Eye Aspect Ratio (EAR) blink detection → rolling baseline → risk score → serial → ESP32-S3 → NeoPixel ring.
 
-Blink detection F1: [your measured value here]  
-Accuracy: ~99% at ≤120 cm (low light), ~99% at ≤150 cm (daylight)  
-Beyond range: exponential degradation  
-Test setup: MacBook Pro built-in camera, 1920×1080, 60 FPS
+- **Landmark-based detection, not a learned classifier**: six MediaPipe landmarks per eye, EAR thresholded in real time, no training data or model required.
+- **Signal processing with a floor**: the reference blink rate is a rolling mean of the last 30 samples, clamped to a literature-derived floor so a sustained low rate can't drag its own reference down and quietly read as normal.
+- **State machine driving physical hardware**: `main.py` sends single-letter state commands (C/A/B) over serial on every state change. The firmware runs its own local logic for the tap/hold button gestures and queues incoming commands during an override, so software and hardware each own a distinct part of the behavior rather than one blindly relaying to the other.
 
-## Known limitations
+## Results
 
-- EAR threshold (0.21) tuned for home lighting; likely needs adjustment 
-  under fluorescent conference lighting
-- Head angles >~30° cause landmark compression; wink detection unreliable
-- No glasses-aware calibration yet but works without indifferently
+Blink detection accuracy, validated against manual count across lighting and distance:
 
-## Run
+| Condition | Distance | F1 |
+|---|---|---|
+| Direct sunlight | 1.0 m | 1.00 |
+| Direct sunlight | 1.5 m | 0.97 |
+| Direct sunlight | 2.0 m | 0.85 |
+| Sunlight + head turns (±45°) | 1.0 m | 0.92 |
+| Table lamp only | 1.5 m | 0.91 |
+| Table lamp only | 2.0 m | 0.57 |
+
+Headline: **F1 = 0.92** (head-turn condition, the most conservative passing result, not the best case). Operating envelope is 60-150 cm; every condition tested in that range clears F1 = 0.90. Setup: MacBook Pro built-in camera, 1920x1080, 60 fps.
+
+The full loop, webcam to risk score to ESP32-S3 to LED, plus tap-to-pause and hold-to-breathe, was flashed and tested end to end on the physical hardware.
+
+## Limitations and failure analysis
+
+- EAR threshold (0.21) tuned for one indoor setup, not re-validated under office or conference lighting.
+- Accuracy drops sharply beyond ~1.5 m in low light (F1 = 0.57 at 2 m under lamp-only light).
+- Head turns beyond ~30° compress eye landmarks and can register as false blinks.
+- Fails under tinted or semi-transparent glasses; built for clear lenses or bare eyes.
+- Baseline has no persistence across sessions and takes ~30 samples to settle, so the first minute of any run reads against a literature-prior floor, not the user's actual resting rate.
+- The ring's breadboard solder joints can flicker under mechanical stress until reflowed (see `hardware/BUILD.md`); electronics aren't yet rigidly mounted inside the enclosure.
+
+## How to run
+
+Requires Python 3.12, MediaPipe 0.10.14 breaks on 3.13's `mp.solutions` API.
 
 ```bash
-python blink_detector.py
+pip install -r requirements.txt
+python main.py
 ```
 
-Requires Python 3.12. MediaPipe pinned to 0.10.14 (3.13 breaks mp.solutions API).
+Runs with just the webcam window if no dome is connected. Full build guide, parts list, wiring, firmware flashing, board settings, and connecting the dome to `main.py`, is in **[hardware/BUILD.md](hardware/BUILD.md)**.
+
+Supporting modules live in `core/`. Everything for the physical build, firmware and parts list and wiring, lives in `hardware/`.
+
+Keyboard: `q` quit, `r` reset, `d` toggle demo/real baseline speed, `1`/`2`/`3` force CALM/ATTENTION/BREAK, `0` clear override.
 
 ## Status
 
-NordiCHI 2026 submission in progress. Hardware build pending.
+Submitted to NordiCHI 2026 Demo track, not accepted for logistical reasons, not a reflection of the work's quality.
+
+## Credits
+Licensed under MIT. If you build on this or reuse parts of it, a credit or link back is appreciated but not required.
+
+**Fuad Mammadov**
+[fammad.com](https://fammad.com/work/lumen) · [LinkedIn](https://www.linkedin.com/in/fammad/) · fred.mmov@gmail.com
+
+Yuting Chen (KTH) collaborated on the physical hardware sessions and breathing-pattern testing for the NordiCHI 2026 submission, "Lumen: A Tangible Somaesthetic Peripheral for Negotiated Screen-Work Interruption." Extended abstract archived at [archive/lumen-nordichi2026-extended-abstract.pdf](archive/lumen-nordichi2026-extended-abstract.pdf).
