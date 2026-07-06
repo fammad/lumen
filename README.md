@@ -1,10 +1,9 @@
-# Lumen
+# Lumen: Blink Detection to Embedded Actuation
 
 ![Made with Python](https://img.shields.io/badge/Made%20with-Python-3776AB?logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow)
 ![Blink Detection F1](https://img.shields.io/badge/Blink%20Detection%20F1-0.92-brightgreen)
 ![NordiCHI 2026](https://img.shields.io/badge/NordiCHI-2026-blueviolet)
-
 
 ![Lumen dome in CALM, BREAK, and BREATHING states, with a hand demonstrating the touch interaction](assets/lumen.jpeg)
 
@@ -13,6 +12,8 @@ A webcam-driven computer vision pipeline (MediaPipe Face Mesh, blink detection, 
 ## What this is, and isn't
 
 This is a computer vision and embedded systems demonstration: real-time facial landmark tracking, a blink detection and signal processing pipeline built from scratch, and a physical actuator driven by that signal. The eye strain framing is the applied context that motivated the build, not a product claim.
+
+All processing happens locally in memory. Video frames are never saved to disk, and the only outbound data is a single-letter state command (C/A/B) sent over a local USB serial connection to the dome. No cloud calls, no logging, nothing persists after the process exits.
 
 It is not a medical or clinical tool. It does not diagnose, treat, or claim to reduce Computer Vision Syndrome or any condition. Blink rate is used here as a heuristic signal, chosen because it is measurable in real time from a laptop webcam, not as a validated biomarker. No population study or efficacy evaluation was performed; the only validation here is blink-detection accuracy (F1), reported below. The pipeline tracks eye landmarks and eyelid closure, not gaze direction.
 
@@ -56,11 +57,21 @@ The full loop, webcam to risk score to ESP32-S3 to LED, plus tap-to-pause and ho
 Requires Python 3.12, MediaPipe 0.10.14 breaks on 3.13's `mp.solutions` API.
 
 ```bash
+git clone https://github.com/fammad/lumen.git
+cd lumen
 pip install -r requirements.txt
 python main.py
 ```
 
 Runs with just the webcam window if no dome is connected. Full build guide, parts list, wiring, firmware flashing, board settings, and connecting the dome to `main.py`, is in **[hardware/BUILD.md](hardware/BUILD.md)**.
+
+The loop underneath `main.py`, stripped to its core:
+
+```python
+baseline_state = baseline.get_state()
+risk = risk_engine.get_risk(baseline_state, now)
+# risk["recommended_state"] -> "CALM" / "ATTENTION" / "BREAK"
+```
 
 Supporting modules live in `core/`. Everything for the physical build, firmware and parts list and wiring, lives in `hardware/`.
 
